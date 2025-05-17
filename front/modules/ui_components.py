@@ -96,25 +96,17 @@ def show_attendance_form(
     # コメント入力欄を追加
     comment = st.text_area("コメント", value=comment, key="comment_input")
 
-    if st.button("保存") and can_save and interruption_valid:
-        payload: Dict[str, Any] = {
-            "date": record_date.isoformat(),
-            "start_time": start_time_final.strftime("%H:%M") if start_time_final else "",
-            "end_time": end_time_final.strftime("%H:%M") if end_time_final else "",
-            "break_minutes": break_minutes if start_time_enabled else 0,
-            "interruptions": new_interruptions,
-            "side_job_minutes": side_job_minutes,
-            "comment": comment
-        }
-        st.session_state["last_payload"] = payload
-        success = save_attendance(record_date.isoformat(), payload, API_URL)
-        if success:
-            st.session_state["saved"] = True
-            st.rerun()
-
-    if "last_payload" in st.session_state:
-        st.write("直近の送信データ（payload）:", st.session_state["last_payload"])
-
+    # 入力値を返す
+    return {
+        "start_time": start_time_final,
+        "end_time": end_time_final,
+        "break_minutes": break_minutes if start_time_enabled else 0,
+        "interruptions": new_interruptions,
+        "side_job_minutes": side_job_minutes,
+        "comment": comment,
+        "can_save": can_save and interruption_valid,
+        "start_time_enabled": start_time_enabled
+    }
 
 def render_calendar(year, month, input_dates_set):
     """日曜始まり・週×曜日のカレンダーHTMLを返す"""
@@ -176,6 +168,69 @@ def render_calendar(year, month, input_dates_set):
         table_html += "</tr>"
     table_html += "</table>"
     return table_html
+
+def render_calendar_only(year, month, input_dates_set, select_key="selected_date"):
+    """
+    日曜始まり・週×曜日のカレンダーHTMLを返す（表示のみ、日付選択機能なし）。
+    """
+    import calendar
+    from datetime import date
+
+    # カレンダー情報の作成
+    month_range = calendar.monthrange(year, month)[1]
+    days = [date(year, month, d) for d in range(1, month_range + 1)]
+
+    # 曜日ラベル（日曜スタート）
+    weekday_labels = ["日", "月", "火", "水", "木", "金", "土"]
+
+    # カレンダー行列作成
+    calendar_matrix = []
+    week = [None] * 7
+    for d in days:
+        wd = (d.weekday() + 1) % 7  # 0=日, ..., 6=土
+        if wd == 0 and any(week):
+            calendar_matrix.append(week)
+            week = [None] * 7
+        week[wd] = d
+    calendar_matrix.append(week)
+
+    # 1週目の前に日付がない曜日をNoneで埋める
+    first_week = calendar_matrix[0]
+    for i in range(7):
+        if first_week[i] is None:
+            continue
+        else:
+            break
+    for j in range(i):
+        first_week[j] = None
+
+    # 最終週の後ろもNoneで埋める
+    last_week = calendar_matrix[-1]
+    for i in range(7):
+        if last_week[i] is None:
+            last_week[i] = None
+
+    # HTMLテーブル生成（表示のみ）
+    table_html = "<table style='border-collapse:collapse;text-align:center;'>"
+    table_html += "<tr><th></th>"
+    for label in weekday_labels:
+        table_html += f"<th>{label}</th>"
+    table_html += "</tr>"
+    for w, week in enumerate(calendar_matrix):
+        table_html += f"<tr><th>{w+1}週</th>"
+        for d in week:
+            if d is None:
+                cell = ""
+            else:
+                if d in input_dates_set:
+                    cell = f'<span style="background-color:#4F8DFD;color:white;padding:2px 6px;border-radius:4px">{d.day}</span>'
+                else:
+                    cell = str(d.day)
+            table_html += f'<td style="border:1px solid #ccc;min-width:32px;height:32px">{cell}</td>'
+        table_html += "</tr>"
+    table_html += "</table>"
+    st.markdown(table_html, unsafe_allow_html=True)
+
 
 def render_edit_blocks(records):
     """編集・削除ブロックを表示"""
