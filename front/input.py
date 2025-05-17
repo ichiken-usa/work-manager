@@ -4,17 +4,21 @@ from datetime import datetime, time, date
 from typing import Any, Dict, List, Optional
 from common import parse_time_str
 
+from settings import API_URL, DEFAULT_START_TIME, DEFAULT_END_TIME, DEFAULT_BREAK_MINUTES, DEFAULT_INTERRUPTION, DEFAULT_START_INTERRUPTION, DEFAULT_END_INTERRUPTION, DEFAULT_SIDE_JOB_MINUTES
 
-API_URL: str = "http://back:8000/api"
+# ページ名を定義
+PAGE_NAME = "input"
 
-DEFAULT_START_TIME: time = time(8, 30)
-DEFAULT_END_TIME: time = time(17, 30)
-DEFAULT_BREAK_MINUTES: int = 60
-DEFAULT_INTERRUPTION: List[Dict[str, str]] = []
-DEFAULT_START_INTERRUPTION = "17:45"
-DEFAULT_END_INTERRUPTION = "19:00"
-DEFAULT_SIDE_JOB_MINUTES: int = 0
+# セッションステートの初期化
+if st.session_state.get("current_page") != PAGE_NAME:
+    st.session_state["current_page"] = PAGE_NAME
 
+    if "last_payload" in st.session_state:
+        del st.session_state["last_payload"]
+    if "saved" in st.session_state:
+        del st.session_state["saved"]
+    if "deleted" in st.session_state:
+        del st.session_state["deleted"]
 
 st.title("勤怠入力")
 

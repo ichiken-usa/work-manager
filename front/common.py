@@ -9,3 +9,13 @@ def parse_time_str(tstr: Optional[str]) -> time:
         return datetime.strptime(tstr, "%H:%M").time()
     except Exception:
         return time(0, 0)
+    
+# interruptionsを文字列（"HH:MM"）に変換
+def serialize_interruptions(inter_list):
+    result = []
+    for i in inter_list:
+        result.append({
+            "start": i["start"].strftime("%H:%M") if isinstance(i["start"], datetime.time) else i["start"],
+            "end": i["end"].strftime("%H:%M") if isinstance(i["end"], datetime.time) else i["end"],
+        })
+    return result
