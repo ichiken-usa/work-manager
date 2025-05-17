@@ -5,6 +5,11 @@ from dateutil.relativedelta import relativedelta
 from common import parse_time_str, serialize_interruptions
 from settings import API_URL, DEFAULT_START_TIME, DEFAULT_END_TIME, DEFAULT_BREAK_MINUTES, DEFAULT_INTERRUPTION, DEFAULT_START_INTERRUPTION, DEFAULT_END_INTERRUPTION, DEFAULT_SIDE_JOB_MINUTES
 from typing import Any, Dict, List, Optional
+import plotly.graph_objects as go
+import numpy as np
+import calendar
+import pandas as pd
+
 
 # ページ名を定義
 PAGE_NAME = "edit"
@@ -30,7 +35,7 @@ default_month = date(today.year, today.month, 1)
 selected_month = st.date_input("対象月（Streamlitの仕様上日付を選択）", value=default_month)
 
 # 表示だけ「YYYY-MM」にする
-st.markdown(f"### 対象月: {selected_month.strftime('%Y-%m')}")
+st.markdown(f"## 対象月: {selected_month.strftime('%Y-%m')}")
 
 
 month_str = selected_month.strftime("%Y-%m")
@@ -60,17 +65,18 @@ side_job_total = 0
 
 for data in records:
     # 勤務合計
-    s = parse_time_str(data.get("start_time")) if data.get("start_time") else DEFAULT_START_TIME
-    e = parse_time_str(data.get("end_time")) if data.get("end_time") else DEFAULT_END_TIME
-    dt_s = datetime.combine(date.today(), s)
-    dt_e = datetime.combine(date.today(), e)
-    work_total += (dt_e - dt_s)
+    if data.get("start_time") and data.get("end_time"):
+        s = parse_time_str(data.get("start_time"))
+        e = parse_time_str(data.get("end_time"))
+        dt_s = datetime.combine(date.today(), s)
+        dt_e = datetime.combine(date.today(), e)
+        work_total += (dt_e - dt_s)
 
     # 休憩合計
-    break_total += int(data.get("break_minutes", DEFAULT_BREAK_MINUTES))
+    break_total += int(data.get("break_minutes", 0))
 
     # 中断合計
-    interruptions = data.get("interruptions", DEFAULT_INTERRUPTION)
+    interruptions = data.get("interruptions", 0)
     for it in interruptions:
         its = parse_time_str(it.get("start"))
         ite = parse_time_str(it.get("end"))
@@ -81,7 +87,6 @@ for data in records:
 
     # 副業合計
     side_job_total += int(data.get("side_job_minutes", DEFAULT_SIDE_JOB_MINUTES))
-
 # --- 集計値の計算 ---
 work_total_hours = work_total.total_seconds() / 3600
 break_total_hours = break_total / 60
@@ -119,9 +124,82 @@ st.table({
         f"{side_job_total_hours:.2f} h",       # 副業合計
     ]
 })
+
+# --- カレンダーの表示 ---
+st.markdown("## 入力一覧（リンク付き）")
+
+# カレンダー情報の作成
+year = selected_month.year
+month = selected_month.month
+month_range = calendar.monthrange(year, month)[1]
+days = [date(year, month, d) for d in range(1, month_range + 1)]
+
+# 入力ありの日付セット
+input_dates_set = set(pd.to_datetime([
+    r["date"] for r in records
+    if r.get("start_time") or r.get("end_time") or r.get("side_job_minutes", 0) > 0
+]).date)
+
+# 曜日ラベル（日曜スタート）
+weekday_labels = ["日", "月", "火", "水", "木", "金", "土"]
+
+# カレンダー行列作成（週ごとにリスト化、各週は曜日順、日曜スタート）
+calendar_matrix = []
+week = [None] * 7  # 1週分の空リスト
+for d in days:
+    wd = (d.weekday() + 1) % 7  # 0=日, ..., 6=土
+    if wd == 0 and any(week):  # 新しい週
+        calendar_matrix.append(week)
+        week = [None] * 7
+    week[wd] = d
+calendar_matrix.append(week)  # 最後の週
+
+# 1週目の前に日付がない曜日をNoneで埋める
+first_week = calendar_matrix[0]
+for i in range(7):
+    if first_week[i] is None:
+        continue
+    else:
+        break
+for j in range(i):
+    first_week[j] = None
+
+# 最終週の後ろもNoneで埋める
+last_week = calendar_matrix[-1]
+for i in range(7):
+    if last_week[i] is None:
+        last_week[i] = None
+
+# HTMLテーブル生成
+table_html = "<table style='border-collapse:collapse;text-align:center;'>"
+# ヘッダー（曜日）
+table_html += "<tr><th></th>"
+for label in weekday_labels:
+    table_html += f"<th>{label}</th>"
+table_html += "</tr>"
+# カレンダーHTML生成部（cell部分のみ修正）
+for w, week in enumerate(calendar_matrix):
+    table_html += f"<tr><th>{w+1}週</th>"
+    for d in week:
+        if d is None:
+            cell = ""
+        elif d in input_dates_set:
+            # アンカーリンク付き
+            cell = f'<a href="#edit-{d.isoformat()}"><span style="background-color:#4F8DFD;color:white;padding:2px 6px;border-radius:4px">{d.day}</span></a>'
+        else:
+            cell = str(d.day)
+        table_html += f'<td style="border:1px solid #ccc;min-width:32px;height:32px">{cell}</td>'
+    table_html += "</tr>"
+
+st.markdown(table_html, unsafe_allow_html=True)
+
+# --- 勤怠データの表示 ---
+st.markdown("## 編集・削除")
 for data in records:
     record_date = data["date"]
     interruptions = data.get("interruptions", DEFAULT_INTERRUPTION)
+    comment = data.get("comment", "")
+    st.markdown(f'<a id="edit-{record_date}"></a>', unsafe_allow_html=True)
 
     with st.container():
         st.markdown(f"### {record_date}")
@@ -131,19 +209,19 @@ for data in records:
         with col1:
             start_time = st.time_input(
                 "開始",
-                value=parse_time_str(data.get("start_time")) if data.get("start_time") else DEFAULT_START_TIME,
+                value=parse_time_str(data.get("start_time")) if data.get("start_time") else None,
                 key=f"{record_date}_start_time_input",
             )
             end_time = st.time_input(
                 "終了",
-                value=parse_time_str(data.get("end_time")) if data.get("end_time") else DEFAULT_END_TIME,
+                value=parse_time_str(data.get("end_time")) if data.get("end_time") else None,
                 key=f"{record_date}_end_time_input",
             )
             break_minutes = st.number_input(
                 "休憩(分)",
                 min_value=0,
                 step=1,
-                value=int(data.get("break_minutes", DEFAULT_BREAK_MINUTES)),
+                value=int(data.get("break_minutes", None)),
                 key=f"{record_date}_break_minutes_input",
             )
 
@@ -161,6 +239,13 @@ for data in records:
             else:
                 st.markdown("None")
 
+            # コメント欄を追加
+            comment_val = st.text_area(
+                "コメント",
+                value=comment,
+                key=f"{record_date}_comment_input"
+            )
+
             col_save, col_delete = st.columns(2)
             with col_save:
                 if st.button("SAVE", key=f"{record_date}_save"):
@@ -170,7 +255,8 @@ for data in records:
                         "end_time": end_time.strftime("%H:%M") if end_time else "",
                         "break_minutes": break_minutes,
                         "interruptions": interruptions,
-                        "side_job_minutes": side_job_minutes
+                        "side_job_minutes": side_job_minutes,
+                        "comment": comment_val
                     }
                     print(f'POST Data: {payload}')
                     st.session_state["last_payload"] = payload

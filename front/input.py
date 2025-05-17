@@ -61,7 +61,8 @@ def show_attendance_form(
     end_time: time,
     break_minutes: int,
     interruptions: List[Dict[str, str]],
-    side_job_minutes: int
+    side_job_minutes: int,
+    comment: Optional[str] = None
 ):
     """
     勤怠入力フォームを表示し、保存処理を行う。
@@ -131,7 +132,7 @@ def show_attendance_form(
     )
 
     # コメント入力欄を追加
-    comment = st.text_area("コメント", value=st.session_state.get("comment", ""), key="comment_input")
+    comment = st.text_area("コメント", value=comment, key="comment_input")
 
     if st.button("保存") and can_save and interruption_valid:
         payload: Dict[str, Any] = {
@@ -175,6 +176,7 @@ def main():
         interruptions = data.get("interruptions", DEFAULT_INTERRUPTION)
         side_job_minutes = int(data.get("side_job_minutes", DEFAULT_SIDE_JOB_MINUTES))
         updated_at = data.get("updated_at")
+        comment = data.get("comment", "")
         st.markdown("🟢 登録済み")
     else:
         st.info("この日付のデータはありません。新規入力できます。")
@@ -184,13 +186,14 @@ def main():
         interruptions = DEFAULT_INTERRUPTION
         side_job_minutes = DEFAULT_SIDE_JOB_MINUTES
         updated_at = None
+        comment = ""  # ← ここを追加
         st.markdown("🔴 未登録")
 
     show_last_updated(updated_at)
 
-    if None not in (start_time, end_time, break_minutes, interruptions, side_job_minutes):
+    if None not in (start_time, end_time, break_minutes, interruptions, side_job_minutes, comment):
         show_attendance_form(
-            record_date, start_time, end_time, break_minutes, interruptions, side_job_minutes
+            record_date, start_time, end_time, break_minutes, interruptions, side_job_minutes, comment
         )
     else:
         st.error("データ取得に失敗したため、入力欄を表示できません。")
