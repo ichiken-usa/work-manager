@@ -130,6 +130,9 @@ def show_attendance_form(
         value=int(side_job_minutes)
     )
 
+    # コメント入力欄を追加
+    comment = st.text_area("コメント", value=st.session_state.get("comment", ""), key="comment_input")
+
     if st.button("保存") and can_save and interruption_valid:
         payload: Dict[str, Any] = {
             "date": record_date.isoformat(),
@@ -137,7 +140,8 @@ def show_attendance_form(
             "end_time": end_time_final.strftime("%H:%M") if end_time_final else "",
             "break_minutes": break_minutes if start_time_enabled else 0,
             "interruptions": new_interruptions,
-            "side_job_minutes": side_job_minutes
+            "side_job_minutes": side_job_minutes,
+            "comment": comment
         }
         st.session_state["last_payload"] = payload
         success = save_attendance(record_date.isoformat(), payload, API_URL)
