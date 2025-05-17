@@ -1,63 +1,120 @@
-from datetime import datetime, time, date
+# Streamlit UI部品・描画系
+from datetime import date, datetime, time
 from typing import Any, Dict, List, Optional
 import requests
 import streamlit as st
-from settings import API_URL, DEFAULT_START_TIME, DEFAULT_END_TIME, DEFAULT_BREAK_MINUTES, DEFAULT_INTERRUPTION, DEFAULT_START_INTERRUPTION, DEFAULT_END_INTERRUPTION, DEFAULT_SIDE_JOB_MINUTES
 
-def parse_time_str(tstr: Optional[str]) -> time:
-    """"HH:MM"形式の文字列をtime型に変換。失敗時は00:00を返す。"""
-    if not tstr:
-        return time(0, 0)
-    try:
-        return datetime.strptime(tstr, "%H:%M").time()
-    except Exception:
-        return time(0, 0)
-    
-# interruptionsを文字列（"HH:MM"）に変換
-def serialize_interruptions(inter_list):
-    result = []
-    for i in inter_list:
-        result.append({
-            "start": i["start"].strftime("%H:%M") if isinstance(i["start"], datetime.time) else i["start"],
-            "end": i["end"].strftime("%H:%M") if isinstance(i["end"], datetime.time) else i["end"],
-        })
-    return result
+from modules.time_utils import parse_time_str
+from modules.api_client import save_attendance
+from settings import (
+    API_URL,
+    DEFAULT_START_TIME,
+    DEFAULT_END_TIME,
+    DEFAULT_BREAK_MINUTES,
+    DEFAULT_INTERRUPTION,
+    DEFAULT_START_INTERRUPTION,
+    DEFAULT_END_INTERRUPTION,
+    DEFAULT_SIDE_JOB_MINUTES,
+)
 
-
-def save_attendance(record_date, payload: Dict[str, Any], api_url: str) -> bool:
+def show_attendance_form(
+    record_date: date,
+    start_time: time,
+    end_time: time,
+    break_minutes: int,
+    interruptions: List[Dict[str, str]],
+    side_job_minutes: int,
+    comment: Optional[str] = None
+):
     """
-    勤怠データをAPIに保存する共通関数。
-
-    Args:
-        record_date: 対象日付（date型またはisoformat文字列）
-        payload (dict): 保存するデータ
-        api_url (str): APIのベースURL
-
-    Returns:
-        bool: 保存成功時はTrue、失敗時はFalse
+    勤怠入力フォームを表示し、保存処理を行う。
+    チェックボックスOFF時は開始・終了時刻、休憩時間の入力不可。
     """
-    try:
-        res = requests.post(f"{api_url}/attendance/{record_date}", json=payload)
-        if res.status_code == 200:
-            return True
-        else:
-            st.error(f"保存に失敗しました: {res.text}")
-            return False
-    except Exception as e:
-        st.error(f"保存時に例外が発生しました: {e}")
-        return False
-    
+    start_time_enabled = st.checkbox("時刻を入力する", value=bool(start_time))
 
-def init_session_state(PAGE_NAME: str, session_state_list: List[str]):
-    """
-    ページ遷移時にセッションステートを初期化する。
-    他ページから遷移してきた場合、last_payload, saved, deletedをクリアする。
-    """
-    if st.session_state.get("current_page") != PAGE_NAME:
-        st.session_state["current_page"] = PAGE_NAME
-        for key in session_state_list:
-            if key in st.session_state:
-                del st.session_state[key]
+    col1, col2 = st.columns(2)
+
+    with col1:
+        start_time_val = st.time_input(
+            "開始時刻",
+            value=start_time if start_time else time(0, 0),
+            key="start_time_input",
+            disabled=not start_time_enabled
+        )
+    with col2:
+        end_time_val = st.time_input(
+            "終了時刻",
+            value=end_time if end_time else time(0, 0),
+            key="end_time_input",
+            disabled=not start_time_enabled
+        )
+
+    # 入力有無で値を決定
+    start_time_final = start_time_val if start_time_enabled else None
+    end_time_final = end_time_val if start_time_enabled else None
+
+    can_save = True
+    if start_time_enabled:
+        if start_time_final > end_time_final:
+            st.error("開始時刻は終了時刻より早くしてください。")
+            can_save = False
+
+    break_minutes = st.number_input(
+        "休憩時間（分）",
+        min_value=0,
+        step=15,
+        value=int(break_minutes) if break_minutes is not None else DEFAULT_BREAK_MINUTES,
+        disabled=not start_time_enabled
+    )
+
+    st.markdown("### その他")
+    new_interruptions: List[Dict[str, str]] = []
+    num_interrupts: int = st.number_input("中断回数", min_value=0, step=1, value=len(interruptions))
+
+    interruption_valid = True
+    for i in range(num_interrupts):
+        col1, col2 = st.columns(2)
+        default_start: str = interruptions[i]['start'] if i < len(interruptions) else DEFAULT_START_INTERRUPTION
+        default_end: str = interruptions[i]['end'] if i < len(interruptions) else DEFAULT_END_INTERRUPTION
+        with col1:
+            istart: time = st.time_input(f"中断 {i+1} 開始", value=parse_time_str(default_start), key=f"interrupt_start_{i}")
+        with col2:
+            iend: time = st.time_input(f"中断 {i+1} 終了", value=parse_time_str(default_end), key=f"interrupt_end_{i}")
+        new_interruptions.append({"start": istart.strftime("%H:%M"), "end": iend.strftime("%H:%M")})
+
+        if istart >= iend:
+            st.error(f"中断{i+1}の開始時刻は終了時刻より早くしてください。")
+            interruption_valid = False
+
+    side_job_minutes = st.number_input(
+        "副業時間（分）",
+        min_value=0,
+        step=15,
+        value=int(side_job_minutes)
+    )
+
+    # コメント入力欄を追加
+    comment = st.text_area("コメント", value=comment, key="comment_input")
+
+    if st.button("保存") and can_save and interruption_valid:
+        payload: Dict[str, Any] = {
+            "date": record_date.isoformat(),
+            "start_time": start_time_final.strftime("%H:%M") if start_time_final else "",
+            "end_time": end_time_final.strftime("%H:%M") if end_time_final else "",
+            "break_minutes": break_minutes if start_time_enabled else 0,
+            "interruptions": new_interruptions,
+            "side_job_minutes": side_job_minutes,
+            "comment": comment
+        }
+        st.session_state["last_payload"] = payload
+        success = save_attendance(record_date.isoformat(), payload, API_URL)
+        if success:
+            st.session_state["saved"] = True
+            st.rerun()
+
+    if "last_payload" in st.session_state:
+        st.write("直近の送信データ（payload）:", st.session_state["last_payload"])
+
 
 def render_calendar(year, month, input_dates_set):
     """日曜始まり・週×曜日のカレンダーHTMLを返す"""
@@ -119,43 +176,6 @@ def render_calendar(year, month, input_dates_set):
         table_html += "</tr>"
     table_html += "</table>"
     return table_html
-
-# 勤怠データ取得
-#@st.cache_data
-def fetch_monthly_attendance(month_str):
-    try:
-        res = requests.get(f"{API_URL}/attendance/month/{month_str}")
-        if res.status_code == 200:
-            print(f'{API_URL}/attendance/month/{month_str} : {res.json()}')
-            return res.json()
-    except Exception as e:
-        st.error(f"取得失敗: {e}")
-    return []
-
-
-def fetch_attendance_data(record_date: date) -> Optional[Dict[str, Any]]:
-    """
-    指定した日付の勤怠データをAPIから取得する。
-
-    Args:
-        record_date (date): 取得対象日付
-
-    Returns:
-        dict or None: 勤怠データ（存在しない場合は空dict、失敗時はNone）
-    """
-    try:
-        res = requests.get(f"{API_URL}/attendance/{record_date.isoformat()}")
-        if res.status_code == 200:
-            return res.json()
-        elif res.status_code == 404:
-            return {}
-        else:
-            st.warning(f"データ取得失敗: {res.status_code}")
-            return None
-    except Exception as e:
-        st.error(f"取得失敗: {e}")
-        return None
-
 
 def render_edit_blocks(records):
     """編集・削除ブロックを表示"""
