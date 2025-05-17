@@ -2,58 +2,13 @@ import streamlit as st
 import requests
 from datetime import datetime, time, date
 from typing import Any, Dict, List, Optional
-from common import parse_time_str, save_attendance
+from common import parse_time_str, save_attendance, init_session_state, fetch_attendance_data, show_last_updated
 from settings import API_URL, DEFAULT_START_TIME, DEFAULT_END_TIME, DEFAULT_BREAK_MINUTES, DEFAULT_INTERRUPTION, DEFAULT_START_INTERRUPTION, DEFAULT_END_INTERRUPTION, DEFAULT_SIDE_JOB_MINUTES
 
 PAGE_NAME = "input"
+session_state_list = ["last_payload", "saved", "deleted", "error"]
 
-def init_session_state():
-    """
-    ページ遷移時にセッションステートを初期化する。
-    他ページから遷移してきた場合、last_payload, saved, deletedをクリアする。
-    """
-    if st.session_state.get("current_page") != PAGE_NAME:
-        st.session_state["current_page"] = PAGE_NAME
-        for key in ["last_payload", "saved", "deleted"]:
-            if key in st.session_state:
-                del st.session_state[key]
 
-def fetch_attendance_data(record_date: date) -> Optional[Dict[str, Any]]:
-    """
-    指定した日付の勤怠データをAPIから取得する。
-
-    Args:
-        record_date (date): 取得対象日付
-
-    Returns:
-        dict or None: 勤怠データ（存在しない場合は空dict、失敗時はNone）
-    """
-    try:
-        res = requests.get(f"{API_URL}/attendance/{record_date.isoformat()}")
-        if res.status_code == 200:
-            return res.json()
-        elif res.status_code == 404:
-            return {}
-        else:
-            st.warning(f"データ取得失敗: {res.status_code}")
-            return None
-    except Exception as e:
-        st.error(f"取得失敗: {e}")
-        return None
-
-def show_last_updated(updated_at: Optional[str]):
-    """
-    最終更新日時を表示する。
-
-    Args:
-        updated_at (str or None): ISO形式の日時文字列
-    """
-    if updated_at:
-        try:
-            dt = datetime.fromisoformat(updated_at)
-            st.info(f"最終更新日時: {dt.strftime('%Y-%m-%d %H:%M:%S')}")
-        except Exception:
-            st.info(f"最終更新日時: {updated_at}")
 
 def show_attendance_form(
     record_date: date,
@@ -158,17 +113,20 @@ def main():
     勤怠入力ページのメイン処理。
     セッション初期化、データ取得、フォーム表示を行う。
     """
-    init_session_state()
-    message = ''
+
+    # ページ遷移時にセッションステートを初期化する
+    init_session_state(PAGE_NAME, session_state_list)
 
     st.title("勤怠入力")
     record_date: date = st.date_input("対象日付", date.today())
 
+    # 勤怠データをAPIから取得
     data = fetch_attendance_data(record_date)
     if data is None:
         st.error("データ取得に失敗したため、入力欄を表示できません。")
         return
 
+    # 取得したデータが空でない場合は、各値を設定
     if data:
         start_time = parse_time_str(data.get("start_time")) if data.get("start_time") else DEFAULT_START_TIME
         end_time = parse_time_str(data.get("end_time")) if data.get("end_time") else DEFAULT_END_TIME
@@ -178,6 +136,7 @@ def main():
         updated_at = data.get("updated_at")
         comment = data.get("comment", "")
         st.markdown("🟢 登録済み")
+    # 取得したデータが空の場合は、初期値を設定
     else:
         st.info("この日付のデータはありません。新規入力できます。")
         start_time = DEFAULT_START_TIME
@@ -189,8 +148,11 @@ def main():
         comment = ""  # ← ここを追加
         st.markdown("🔴 未登録")
 
+    # 最終更新日時を表示
     show_last_updated(updated_at)
 
+    # 勤怠入力フォームを表示
+    # 取得したデータが空でない場合は、各値を設定
     if None not in (start_time, end_time, break_minutes, interruptions, side_job_minutes, comment):
         show_attendance_form(
             record_date, start_time, end_time, break_minutes, interruptions, side_job_minutes, comment
