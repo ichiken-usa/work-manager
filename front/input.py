@@ -2,11 +2,9 @@ import streamlit as st
 from datetime import datetime, time, date
 import pandas as pd
 
-from modules.time_utils import parse_time_str
 from modules.api_client import fetch_attendance_data, fetch_monthly_attendance, save_attendance, fetch_daily_summary
 from modules.session import init_session_state
 from modules.ui_components import show_last_updated, show_attendance_form, render_calendar_only, get_safe
-from modules.attendance_utils import calc_day_summary
 from settings import API_URL, DEFAULT_START_TIME, DEFAULT_END_TIME, DEFAULT_BREAK_MINUTES, DEFAULT_SIDE_JOB_MINUTES, DEFAULT_START_INTERRUPTION, DEFAULT_END_INTERRUPTION, DEFAULT_INTERRUPTION
 
 

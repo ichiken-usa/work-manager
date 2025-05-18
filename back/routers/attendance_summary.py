@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, date
-from models import AttendanceRecord
 from database import SessionLocal
 
 from modules.time_utils import parse_time_str
+from models import AttendanceRecord
+from schemas import AttendanceDaySummaryResponse
 
 from typing import List, Dict
 from collections import defaultdict
@@ -76,14 +77,13 @@ def calc_day_summary_backend(record: AttendanceRecord) -> Dict[str, any]:
     }
 
 # 1日の集計を計算するAPI
-@router.get("/attendance/summary/daily/{record_date}")
-def get_day_detail_summary(record_date: str, db: Session = Depends(get_db)):
+@router.get("/attendance/summary/daily/{record_date}", response_model=AttendanceDaySummaryResponse)
+def get_day_detail_summary(record_date: date, db: Session = Depends(get_db)):
     record = db.query(AttendanceRecord).filter_by(date=record_date).first()
     if not record:
         raise HTTPException(status_code=404, detail="Record not found")
     result = calc_day_summary_backend(record)
     return result
-
 
 # ⬛ 1. 月別サマリーAPI
 @router.get("/attendance/summary/12months")

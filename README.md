@@ -11,15 +11,18 @@
   - [フォルダ構造](#フォルダ構造)
   - [ORMモデル仕様](#ormモデル仕様)
     - [AttendanceRecord（勤怠レコード）](#attendancerecord勤怠レコード)
+  - [API エンドポイント仕様](#api-エンドポイント仕様)
+    - [ベースURL](#ベースurl)
+    - [勤怠データCRUD](#勤怠データcrud)
+    - [集計機能](#集計機能)
   - [APIスキーマ仕様](#apiスキーマ仕様)
     - [Interruption（中断時間）](#interruption中断時間)
     - [AttendanceBase（勤怠情報 共通部）](#attendancebase勤怠情報-共通部)
     - [AttendanceCreate（勤怠新規作成リクエスト用）](#attendancecreate勤怠新規作成リクエスト用)
     - [AttendanceUpdate（勤怠更新リクエスト用）](#attendanceupdate勤怠更新リクエスト用)
     - [AttendanceOut（勤怠情報レスポンス用）](#attendanceout勤怠情報レスポンス用)
-  - [勤怠管理API エンドポイント仕様](#勤怠管理api-エンドポイント仕様)
-    - [ベースURL](#ベースurl)
-    - [勤怠データCRUD](#勤怠データcrud)
+    - [AttendanceSummary（集計値）](#attendancesummary集計値)
+    - [AttendanceDaySummaryResponse（1日分の集計レスポンス）](#attendancedaysummaryresponse1日分の集計レスポンス)
 
 ## 機能概略
 
@@ -78,21 +81,23 @@ ui_components.pyが特にとっちらかっているので、いつか整理し�
 ```txt
 work-manager/
 ├── back/                        # バックエンド（FastAPI）
+│   ├── attendance.db            # SQLiteデータベース（永続化用）
 │   ├── database.py              # DB接続・セッション管理・Baseクラス定義
 │   ├── main.py                  # FastAPIアプリのエントリーポイント
 │   ├── models.py                # 勤怠データなどのORMモデル（テーブル定義）
-│   ├── schemas.py               # API入出力用のPydanticスキーマ（バリデーション・型定義）
-│   ├── requirements.txt         # バックエンドの依存パッケージ
+│   ├── schemas.py               # API入出力用のPydanticスキーマ
+│   ├── requirements.txt         # バックエンド依存パッケージ
 │   ├── Dockerfile               # バックエンド用Dockerfile
-│   ├── attendance.db            # SQLiteデータベース（永続化用）
+│   ├── modules/                 # バックエンド共通ロジック
+│   │   └── time_utils.py
 │   └── routers/                 # APIルータ（機能別分割）
-│       ├── attendance.py            # 勤怠データのCRUD API
+│       ├── attendance.py            # 勤怠データCRUD API
 │       └── attendance_summary.py    # 勤怠集計API
 ├── front/                       # フロントエンド（Streamlit）
 │   ├── input.py                 # 勤怠入力ページ（メイン画面）
 │   ├── settings.py              # API URLやデフォルト値などの設定
-│   ├── requirements.txt         # フロントエンドの依存パッケージ
-│   ├── Dockerfile               # フロントエンド用Dockerfile
+│   ├── requirements.txt         # フロント依存パッケージ
+│   ├── Dockerfile               # フロント用Dockerfile
 │   ├── modules/                 # 共通ロジック・UI部品
 │   │   ├── api_client.py            # API通信処理
 │   │   ├── attendance_utils.py      # 勤怠集計・ロジック
@@ -102,9 +107,10 @@ work-manager/
 │   └── pages/                   # Streamlitマルチページ
 │       ├── dashboard.py             # ダッシュボード画面
 │       └── edit.py                  # 編集・集計画面
-├── docker-compose.yml            # バックエンド・フロントエンドのサービスを一括起動するDocker構成ファイル
-├── README.md                     # プロジェクトの概要・利用方法
-└── LICENSE                       # ライセンス情報
+├── docker-compose.yml            # Docker一括起動構成
+├── README.md                     # プロジェクト概要・利用方法
+├── LICENSE                       # ライセンス
+└── .gitignore                    # Git管理除外ファイル
 ```
 
 ## ORMモデル仕様
@@ -135,21 +141,37 @@ DB管理しているのは今の所この1テーブルのみです。モデル�
 | updated_at        | DateTime   | 最終更新日時（レコード作成・更新時に自動設定）| default/auto-update    |
 | comment           | String     | コメント・備考欄                              | nullable               |
 
+## API エンドポイント仕様
 
+API仕様はFastAPIで自動生成されます。[APIドキュメント localhost:8000/docs](localhost:8000/docs)
+
+### ベースURL
+
+```txt
+http://<host>:8000/api
+```
+
+### 勤怠データCRUD
+
+| メソッド | パス                                         | 概要                       | 主なレスポンス         |
+|----------|----------------------------------------------|----------------------------|------------------------|
+| GET      | /attendance/{record_date}                    | 指定日の勤怠データ取得      | AttendanceOut          |
+| POST     | /attendance/{record_date}                    | 指定日の勤怠データ作成/更新 | AttendanceOut          |
+| DELETE   | /attendance/{record_date}                    | 指定日の勤怠データ削除      | {"detail": "Deleted"}  |
+| GET      | /attendance/month/{year_month}               | 指定月の勤怠データ一覧取得  | List[AttendanceOut]    |
+
+### 集計機能
+
+集計機能は工事中です。
 
 ## APIスキーマ仕様
 
-- `interruptions`は`Interruption`型のリストで、各要素が中断の開始・終了時刻を持ちます。中断回数を可変とするためDBはJSONで保存するようにしているので、文字列としています。
-- `start_time`と`end_time`は中断の文字列と合わせるために文字列にしています。フロントでの混乱を避けるためです。
-- `AttendanceCreate`・`AttendanceUpdate`はAPIリクエストボディ用、`AttendanceOut`はAPIレスポンス用です。
-- すべてPydanticのバリデーションが適用されます。
-
 ### Interruption（中断時間）
 
-| フィールド名 | 型     | 説明                         | 必須 |
-|--------------|--------|------------------------------|------|
-| start        | str    | 中断開始時刻（"HH:MM"形式）  | ○    |
-| end          | str    | 中断終了時刻（"HH:MM"形式）  | ○    |
+| フィールド名 | 型   | 説明                         | 必須 |
+|--------------|------|------------------------------|------|
+| start        | str  | 中断開始時刻（"HH:MM"形式）  | ○    |
+| end          | str  | 中断終了時刻（"HH:MM"形式）  | ○    |
 
 ### AttendanceBase（勤怠情報 共通部）
 
@@ -178,22 +200,22 @@ DB管理しているのは今の所この1テーブルのみです。モデル�
 | date              | date                      | 勤怠日付                                     | ○    |
 | ...               | AttendanceBaseの全フィールド | 上記参照                                     |      |
 
-## 勤怠管理API エンドポイント仕様
+### AttendanceSummary（集計値）
 
-API仕様はFastAPIで自動生成されます。[APIドキュメント localhost:8000/docs](localhost:8000/docs)
+| フィールド名         | 型     | 説明                   |
+|----------------------|--------|------------------------|
+| work_hours           | float  | 勤務時間（時間単位）   |
+| break_hours          | float  | 休憩時間（時間単位）   |
+| interruptions_count  | int    | 中断回数               |
+| interrupt_hours      | float  | 中断時間（時間単位）   |
+| side_job_hours       | float  | 副業時間（時間単位）   |
+| break_total_hours    | float  | 休憩＋中断合計（時間） |
+| actual_work_hours    | float  | 実働時間（時間単位）   |
+| gross_hours          | float  | 総拘束時間（時間単位） |
 
-### ベースURL
+### AttendanceDaySummaryResponse（1日分の集計レスポンス）
 
-```txt
-http://<host>:8000/api
-```
-
-### 勤怠データCRUD
-
-| メソッド | パス                                         | 概要                       | 主なレスポンス         |
-|----------|----------------------------------------------|----------------------------|------------------------|
-| GET      | /attendance/{record_date}                    | 指定日の勤怠データ取得      | AttendanceOut          |
-| POST     | /attendance/{record_date}                    | 指定日の勤怠データ作成/更新 | AttendanceOut          |
-| DELETE   | /attendance/{record_date}                    | 指定日の勤怠データ削除      | {"detail": "Deleted"}  |
-| GET      | /attendance/month/{year_month}               | 指定月の勤怠データ一覧取得  | List[AttendanceOut]    |
-
+| フィールド名 | 型                | 説明                   |
+|--------------|-------------------|------------------------|
+| raw          | AttendanceOut     | 元データ               |
+| summary      | AttendanceSummary | 計算・集計結果         |
