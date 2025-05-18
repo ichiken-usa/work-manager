@@ -1,8 +1,11 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, date
-from models import AttendanceRecord  # 必要なものだけをインポート
 from database import SessionLocal
+
+from modules.time_utils import parse_time_str
+from models import AttendanceRecord
+from schemas import AttendanceDaySummaryResponse
 
 from typing import List, Dict
 from collections import defaultdict
@@ -15,6 +18,72 @@ def get_db():
         yield db
     finally:
         db.close()
+
+def calc_day_summary_backend(record: AttendanceRecord) -> Dict[str, any]:
+    """1日の勤怠データから元データと計算値を分けて返す（バックエンド用）"""
+    # 勤務時間などの計算
+    if record.start_time and record.end_time:
+        s = parse_time_str(record.start_time)
+        e = parse_time_str(record.end_time)
+        dt_s = datetime.combine(date.today(), s)
+        dt_e = datetime.combine(date.today(), e)
+        work_time = dt_e - dt_s
+    else:
+        work_time = timedelta(0)
+
+    break_minutes = int(record.break_minutes or 0)
+    break_time = timedelta(minutes=break_minutes)
+    interruptions = record.interruptions or []
+    interrupt_time = timedelta(0)
+    for it in interruptions:
+        its = parse_time_str(it.get("start"))
+        ite = parse_time_str(it.get("end"))
+        if its and ite:
+            dt_its = datetime.combine(date.today(), its)
+            dt_ite = datetime.combine(date.today(), ite)
+            interrupt_time += (dt_ite - dt_its)
+    total_break = break_time + interrupt_time
+    actual_work = work_time - total_break
+    side_job_minutes = int(record.side_job_minutes or 0)
+
+    # 取得したままのデータ
+    raw_data = {
+        "id": record.id,
+        "date": str(record.date),
+        "start_time": record.start_time,
+        "end_time": record.end_time,
+        "break_minutes": record.break_minutes,
+        "interruptions": record.interruptions,
+        "side_job_minutes": record.side_job_minutes,
+        "updated_at": record.updated_at.isoformat() if record.updated_at else None,
+        "comment": record.comment,
+    }
+
+    # 計算結果
+    calc_data = {
+        "work_hours": round(work_time.total_seconds() / 3600, 2),
+        "break_hours": round(break_time.total_seconds() / 3600, 2),
+        "interruptions_count": len(interruptions),
+        "interrupt_hours": round(interrupt_time.total_seconds() / 3600, 2),
+        "side_job_hours": round(side_job_minutes / 60, 2),
+        "break_total_hours": round(total_break.total_seconds() / 3600, 2),
+        "actual_work_hours": round(actual_work.total_seconds() / 3600, 2),
+        "gross_hours": round((work_time.total_seconds() + side_job_minutes * 60 - interrupt_time.total_seconds()) / 3600, 2),
+    }
+
+    return {
+        "raw": raw_data,
+        "summary": calc_data
+    }
+
+# 1日の集計を計算するAPI
+@router.get("/attendance/summary/daily/{record_date}", response_model=AttendanceDaySummaryResponse)
+def get_day_detail_summary(record_date: date, db: Session = Depends(get_db)):
+    record = db.query(AttendanceRecord).filter_by(date=record_date).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    result = calc_day_summary_backend(record)
+    return result
 
 # ⬛ 1. 月別サマリーAPI
 @router.get("/attendance/summary/12months")
@@ -55,28 +124,3 @@ def get_monthly_summary(db: Session = Depends(get_db)):
     summaries.reverse()  # 昇順（月初から最新）
     return summaries
 
-# ⬛ 2. 日別サマリーAPI
-@router.get("/attendance/summary/daily/{month}")
-def get_daily_summary(month: str, db: Session = Depends(get_db)):
-    start = datetime.strptime(month, "%Y-%m").date()
-    if start.month == 12:
-        end = date(start.year + 1, 1, 1)
-    else:
-        end = date(start.year, start.month + 1, 1)
-
-    records = db.query(AttendanceRecord).filter(
-        AttendanceRecord.date >= start,
-        AttendanceRecord.date < end
-    ).all()
-
-    day_map = defaultdict(float)
-
-    for r in records:
-        if r.start_time and r.end_time:
-            minutes = ((datetime.combine(date.min, r.end_time) -
-                        datetime.combine(date.min, r.start_time)).seconds) / 60
-            minutes -= r.break_minutes or 0
-            day_map[r.date.strftime("%Y-%m-%d")] += minutes
-
-    result = [{"date": k, "work_minutes": v} for k, v in sorted(day_map.items())]
-    return result

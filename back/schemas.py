@@ -28,3 +28,19 @@ class AttendanceUpdate(AttendanceBase):
 # 勤怠情報レスポンス用
 class AttendanceOut(AttendanceBase):
     date: date  # 勤怠日付
+
+# 勤怠情報の集計結果用
+class AttendanceSummary(BaseModel):
+    work_hours: float
+    break_hours: float
+    interruptions_count: int
+    interrupt_hours: float
+    side_job_hours: float
+    break_total_hours: float
+    actual_work_hours: float
+    gross_hours: float
+
+# 勤怠情報の集計結果レスポンス用
+class AttendanceDaySummaryResponse(BaseModel):
+    raw: AttendanceOut
+    summary: AttendanceSummary

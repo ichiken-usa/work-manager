@@ -17,6 +17,11 @@ from settings import (
     DEFAULT_SIDE_JOB_MINUTES,
 )
 
+def get_safe(summary: dict, key: str, default=""):
+    """summary辞書からkeyを安全に取得。なければdefaultを返す"""
+    return summary[key] if summary and key in summary else default
+
+
 def show_attendance_form(
     record_date: date,
     start_time: time,
