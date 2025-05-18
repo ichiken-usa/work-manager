@@ -17,3 +17,4 @@ class AttendanceRecord(Base):
     interruptions = Column(JSON, nullable=True)
     side_job_minutes = Column(Integer, nullable=True)
     updated_at = Column(DateTime, nullable=True, default=now_local, onupdate=now_local)
+    comment = Column(String, nullable=True)  # コメント欄

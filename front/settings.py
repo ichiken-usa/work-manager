@@ -1,0 +1,11 @@
+from datetime import time
+from typing import List, Dict
+
+API_URL = "http://back:8000/api"
+DEFAULT_START_TIME = time(8, 30)
+DEFAULT_END_TIME = time(17, 30)
+DEFAULT_BREAK_MINUTES = 60
+DEFAULT_INTERRUPTION: List[Dict[str, str]] = []
+DEFAULT_START_INTERRUPTION = "17:45"
+DEFAULT_END_INTERRUPTION = "19:00"
+DEFAULT_SIDE_JOB_MINUTES = 0

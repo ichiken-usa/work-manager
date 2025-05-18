@@ -42,7 +42,14 @@ def create_or_update_attendance(record_date: date, data: AttendanceCreate, db: S
     db.refresh(record)
     return record
 
-
+@router.delete("/attendance/{record_date}")
+def delete_attendance(record_date: date, db: Session = Depends(get_db)):
+    record = db.query(AttendanceRecord).filter_by(date=record_date).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Record not found")
+    db.delete(record)
+    db.commit()
+    return {"detail": "Deleted"}
 
 @router.get("/attendance/month/{year_month}", response_model=List[AttendanceOut])
 def read_month_data(year_month: str, db: Session = Depends(get_db)):

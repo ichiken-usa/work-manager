@@ -15,6 +15,7 @@ class AttendanceBase(BaseModel):
     interruptions: Optional[List[Interruption]] = []
     side_job_minutes: Optional[int] = None
     updated_at: Optional[datetime] = None
+    comment: Optional[str] = None  # コメント欄
 
 # 勤怠新規作成リクエスト用
 class AttendanceCreate(AttendanceBase):
