@@ -18,6 +18,7 @@ def fetch_monthly_summary():
     try:
         res = requests.get(f"{API_URL}/attendance/summary/12months")
         if res.status_code == 200:
+            print(res.json())
             return res.json()
     except Exception as e:
         st.error(f"取得失敗: {e}")
