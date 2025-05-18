@@ -28,7 +28,6 @@ def save_attendance(record_date, payload: Dict[str, Any], api_url: str) -> bool:
         return False
 
 # 勤怠データ取得
-#@st.cache_data
 def fetch_monthly_attendance(month_str):
     try:
         res = requests.get(f"{API_URL}/attendance/month/{month_str}")
