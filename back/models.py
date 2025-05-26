@@ -18,3 +18,11 @@ class AttendanceRecord(Base):
     side_job_minutes = Column(Integer, nullable=True)
     updated_at = Column(DateTime, nullable=True, default=now_local, onupdate=now_local)
     comment = Column(String, nullable=True)  # コメント欄
+
+class Holiday(Base):
+    # 祝日を管理するモデル
+    __tablename__ = "holidays"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, index=True, nullable=False, unique=True)
+    name = Column(String, nullable=True)  # 祝日の名前（例: "元日", "建国記念の日"）
