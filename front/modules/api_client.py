@@ -87,3 +87,67 @@ def fetch_daily_summary(record_date: date) -> Optional[Dict[str, Any]]:
     except Exception as e:
         st.error(f"取得失敗: {e}")
         return None
+    
+# 1ヶ月の集計データを取得する
+def fetch_monthly_summary(year_month: str) -> Optional[List[Dict[str, Any]]]:
+    """
+    指定した年月の勤怠データおよび集計データをAPIから取得する。
+
+    Args:
+        year_month (str): 取得対象年月（YYYY-MM形式）
+
+    Returns:
+        list or None: 勤怠データと集計データのリスト（失敗時はNone）
+    """
+    try:
+        res = requests.get(f"{API_URL}/attendance/summary/monthly/{year_month}")
+        if res.status_code == 200:
+            return res.json()
+        else:
+            st.warning(f"データ取得失敗: {res.status_code}")
+            return None
+    except Exception as e:
+        st.error(f"取得失敗: {e}")
+        return None
+    
+
+API_URL = "http://back:8000/api"
+
+@st.cache_data
+def fetch_forecast_data(year_month):
+    try:
+        res = requests.get(f"{API_URL}/attendance/forecast/{year_month}")
+        if res.status_code == 200:
+            return res.json()
+        else:
+            st.error(f"予測データの取得に失敗しました: {res.text}")
+            return None
+    except Exception as e:
+        st.error(f"予測データの取得時にエラーが発生しました: {e}")
+        return None
+
+@st.cache_data
+def fetch_daily_attendance(year_month):
+    try:
+        res = requests.get(f"{API_URL}/attendance/month/{year_month}")
+        if res.status_code == 200:
+            return res.json()
+        else:
+            st.error(f"日毎の勤怠データの取得に失敗しました: {res.text}")
+            return None
+    except Exception as e:
+        st.error(f"日毎の勤怠データの取得時にエラーが発生しました: {e}")
+        return None
+
+@st.cache_data
+def fetch_holidays(year_month):
+    try:
+        res = requests.get(f"{API_URL}/holidays/{year_month}")
+        if res.status_code == 200:
+            return [holiday["date"] for holiday in res.json()]  # 祝日の日付リストを取得
+        else:
+            st.error(f"祝日データの取得に失敗しました: {res.text}")
+            return []
+    except Exception as e:
+        st.error(f"祝日データの取得時にエラーが発生しました: {e}")
+        return []
