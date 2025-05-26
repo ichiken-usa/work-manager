@@ -44,3 +44,16 @@ class AttendanceSummary(BaseModel):
 class AttendanceDaySummaryResponse(BaseModel):
     raw: AttendanceOut
     summary: AttendanceSummary
+
+class HolidayBase(BaseModel):
+    date: date
+    name: str
+
+class HolidayCreate(HolidayBase):
+    pass
+
+class HolidayOut(HolidayBase):
+    id: int
+
+    class Config:
+        orm_mode = True
