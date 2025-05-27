@@ -151,3 +151,25 @@ def fetch_holidays(year_month):
     except Exception as e:
         st.error(f"祝日データの取得時にエラーが発生しました: {e}")
         return []
+    
+@st.cache_data
+def fetch_aggregate_attendance(year_month: str) -> Dict[str, float]:
+    """
+    勤怠データのリストから集計情報を計算する。
+
+    Args:
+        records (list): 勤怠データのリスト
+
+    Returns:
+        dict: 集計結果（勤務日数、総勤務時間、実働時間など）
+    """
+    try:
+        res = requests.get(f'{API_URL}/attendance/summary/monthly-agg/{year_month}')
+        if res.status_code == 200:
+            return res.json()
+        else:
+            st.warning(f"データ取得失敗: {res.status_code}")
+            return None
+    except Exception as e:
+        st.error(f"取得失敗: {e}")
+        return None

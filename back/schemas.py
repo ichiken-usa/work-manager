@@ -45,6 +45,22 @@ class AttendanceDaySummaryResponse(BaseModel):
     raw: AttendanceOut
     summary: AttendanceSummary
 
+    class Config:
+        from_attributes = True  # 旧: orm_mode = True
+
+class MonthlyAggregateSummary(BaseModel):
+    work_total_hours: float
+    break_total_hours: float
+    interrupt_total_hours: float
+    side_job_total_hours: float
+    gross_total_hours: float
+    actual_work_hours: float
+    work_days: int
+    gross_days: int  # グロス日数
+
+    class Config:
+        from_attributes = True  # Pydantic v2対応
+
 class HolidayBase(BaseModel):
     date: date
     name: str
@@ -56,4 +72,4 @@ class HolidayOut(HolidayBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True

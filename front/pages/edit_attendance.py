@@ -2,10 +2,10 @@ import streamlit as st
 from datetime import datetime, date, timedelta
 import pandas as pd
 
-from modules.api_client import fetch_monthly_attendance
+from modules.api_client import fetch_monthly_attendance, fetch_aggregate_attendance
 from modules.ui_components import render_calendar, render_edit_blocks
 from modules.session import init_session_state
-from modules.attendance_utils import aggregate_attendance
+
 
 
 # ページ名を定義
@@ -25,16 +25,12 @@ selected_month = st.date_input("対象月（Streamlitの仕様上日付を選択
 
 # 表示だけ「YYYY-MM」にする
 st.markdown(f"## 対象月: {selected_month.strftime('%Y-%m')}")
-
-# --- 勤怠データの取得 ---
 month_str = selected_month.strftime("%Y-%m")
-records = fetch_monthly_attendance(month_str)
 
-# 日付の昇順（古い→新しい）でソート
-records = sorted(records, key=lambda r: r["date"])
 
 # --- 集計 ---
-agg = aggregate_attendance(records)
+agg = fetch_aggregate_attendance(month_str)
+
 work_total_hours = agg["work_total_hours"]
 break_total_hours = agg["break_total_hours"]
 interrupt_total_hours = agg["interrupt_total_hours"]
@@ -47,8 +43,9 @@ work_days = agg["work_days"]
 st.markdown("## 月集計")
 st.table({
     "項目": [
-        "勤務日数",
+        "総日数:入力のある全日数",
         "総勤務時間：勤務合計と副業合計の総合計", 
+        "勤務日数：勤務時間登録がある日数",
         "勤務合計：開始と終了からのみ算出した時間", 
         "実働時間：勤務合計から休憩と中断を引いた時間",
         "休憩合計：休憩時間の合計", 
@@ -56,15 +53,22 @@ st.table({
         "副業合計：副業時間の合計",
     ],
     "値": [
-        f"{work_days} 日",
-        f"{gross_total_hours:.2f} h",
-        f"{work_total_hours:.2f} h",
-        f"{actual_work_hours:.2f} h",
-        f"{break_total_hours:.2f} h",
-        f"{interrupt_total_hours:.2f} h",
-        f"{side_job_total_hours:.2f} h",
+        f"{agg['gross_days']} 日",
+        f"{agg['gross_total_hours']:.2f} h",
+        f"{agg['work_days']} 日",
+        f"{agg['work_total_hours']:.2f} h",
+        f"{agg['actual_work_hours']:.2f} h",
+        f"{agg['break_total_hours']:.2f} h",
+        f"{agg['interrupt_total_hours']:.2f} h",
+        f"{agg['side_job_total_hours']:.2f} h",
     ]
 })
+
+# --- 勤怠データの取得 ---
+records = fetch_monthly_attendance(month_str)
+
+# 日付の昇順（古い→新しい）でソート
+records = sorted(records, key=lambda r: r["date"])
 
 # --- カレンダーの表示 ---
 st.markdown("## 入力一覧（リンク付き）")

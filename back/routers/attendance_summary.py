@@ -4,10 +4,12 @@ from datetime import datetime, timedelta, date
 from database import SessionLocal
 from modules.time_utils import parse_time_str
 from models import AttendanceRecord, AttendanceRecord, Holiday
-from schemas import AttendanceDaySummaryResponse
+from schemas import AttendanceDaySummaryResponse, MonthlyAggregateSummary
+
 from datetime import timedelta
-from typing import List, Dict
+from typing import List, Dict, Any
 from collections import defaultdict
+from sqlalchemy import extract
 
 router = APIRouter()
 
@@ -75,6 +77,82 @@ def calc_day_summary_backend(record: AttendanceRecord) -> Dict[str, any]:
         "summary": calc_data
     }
 
+def aggregate_attendance(records: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    勤怠データのリストから集計値を計算して返す。
+
+    Returns:
+        {
+            "work_total_hours": float,
+            "break_total_hours": float,
+            "interrupt_total_hours": float,
+            "side_job_total_hours": float,
+            "gross_total_hours": float,
+            "actual_work_hours": float,
+            "work_days": int,
+            "gross_days": int  # 新たに追加
+        }
+    """
+
+    work_total = timedelta()
+    break_total = 0
+    interrupt_total = timedelta()
+    side_job_total = 0
+    gross_days = 0  # グロス日数をカウント
+
+    for data in records:
+        # 勤務合計
+        if data.get("start_time") and data.get("end_time"):
+            s = parse_time_str(data.get("start_time"))
+            e = parse_time_str(data.get("end_time"))
+            dt_s = datetime.combine(date.today(), s)
+            dt_e = datetime.combine(date.today(), e)
+            work_total += (dt_e - dt_s)
+
+        # 休憩合計
+        break_total += int(data.get("break_minutes", 0))
+
+        # 中断合計
+        interruptions = data.get("interruptions", 0)
+        for it in interruptions:
+            its = parse_time_str(it.get("start"))
+            ite = parse_time_str(it.get("end"))
+            if its and ite:
+                dt_its = datetime.combine(date.today(), its)
+                dt_ite = datetime.combine(date.today(), ite)
+                interrupt_total += (dt_ite - dt_its)
+
+        # 副業合計
+        side_job_total += int(data.get("side_job_minutes", 0))
+
+        # グロス日数のカウント（勤務または副業に入力がある日）
+        if (data.get("start_time") and data.get("end_time")) or data.get("side_job_minutes"):
+            gross_days += 1
+
+    # 表示単位の変換
+    work_total_hours = work_total.total_seconds() / 3600  # 総勤務時間
+    break_total_hours = break_total / 60  # 休憩時間の合計
+    interrupt_total_hours = interrupt_total.total_seconds() / 3600  # 中断時間の合計
+    side_job_total_hours = side_job_total / 60  # 副業時間の合計
+
+    gross_total_hours = work_total_hours + side_job_total_hours  # 総勤務時間
+    actual_work_hours = work_total_hours - break_total_hours - interrupt_total_hours  # 実働時間
+
+    work_days = len([
+        r for r in records
+        if r.get("start_time") and r.get("end_time")
+    ])
+
+    return {
+        "work_total_hours": work_total_hours,
+        "break_total_hours": break_total_hours,
+        "interrupt_total_hours": interrupt_total_hours,
+        "side_job_total_hours": side_job_total_hours,
+        "gross_total_hours": gross_total_hours,
+        "actual_work_hours": actual_work_hours,
+        "work_days": work_days,
+        "gross_days": gross_days  # グロス日数を追加
+    }
 
 # 1日の集計を計算するAPI
 @router.get("/attendance/summary/daily/{record_date}", response_model=AttendanceDaySummaryResponse)
@@ -221,7 +299,19 @@ def forecast_monthly_work_hours(year_month: str, db: Session = Depends(get_db)):
             start_time = parse_time_str(record.start_time)
             end_time = parse_time_str(record.end_time)
             work_time = (datetime.combine(date.today(), end_time) - datetime.combine(date.today(), start_time)).total_seconds() / 3600
-            total_work_hours += work_time
+
+            # 休憩時間と中断時間を計算
+            break_time = (record.break_minutes or 0) / 60  # 分を時間に変換
+            interrupt_time = 0
+            for it in record.interruptions or []:
+                its = parse_time_str(it.get("start"))
+                ite = parse_time_str(it.get("end"))
+                if its and ite:
+                    interrupt_time += (datetime.combine(date.today(), ite) - datetime.combine(date.today(), its)).total_seconds() / 3600
+
+            # 実働時間を計算
+            actual_work_hours = work_time - break_time - interrupt_time
+            total_work_hours += actual_work_hours
 
     # 未登録日は1日8時間として加算
     total_work_hours += len(unregistered_dates) * 8
@@ -233,3 +323,43 @@ def forecast_monthly_work_hours(year_month: str, db: Session = Depends(get_db)):
         "unregistered_days": len(unregistered_dates),
         "holiday_days": len(holiday_dates),
     }
+
+
+@router.get("/attendance/summary/monthly-agg/{year_month}", response_model=MonthlyAggregateSummary)
+def get_monthly_aggregate(year_month: str, db: Session = Depends(get_db)):
+    """
+    指定した月の勤怠データを集計して返すAPI
+    """
+    try:
+        year, month = map(int, year_month.split("-"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid format. Use YYYY-MM.")
+    
+    records = db.query(AttendanceRecord)\
+        .filter(extract("year", AttendanceRecord.date) == year)\
+        .filter(extract("month", AttendanceRecord.date) == month)\
+        .all()
+
+    # オブジェクトを辞書形式に変換
+    records_dict = [
+        {
+            "id": record.id,
+            "date": record.date,
+            "start_time": record.start_time,
+            "end_time": record.end_time,
+            "break_minutes": record.break_minutes,
+            "interruptions": record.interruptions,
+            "side_job_minutes": record.side_job_minutes,
+            "updated_at": record.updated_at,
+            "comment": record.comment,
+        }
+        for record in records
+    ]
+
+    # 日付の昇順（古い→新しい）でソート
+    records_dict = sorted(records_dict, key=lambda r: r["date"])
+
+    # 集計
+    summaries = aggregate_attendance(records_dict)
+
+    return summaries
