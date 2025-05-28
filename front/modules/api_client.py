@@ -113,7 +113,6 @@ def fetch_monthly_summary(year_month: str) -> Optional[List[Dict[str, Any]]]:
 
 API_URL = "http://back:8000/api"
 
-@st.cache_data
 def fetch_forecast_data(year_month):
     try:
         res = requests.get(f"{API_URL}/attendance/forecast/{year_month}")
@@ -126,7 +125,6 @@ def fetch_forecast_data(year_month):
         st.error(f"予測データの取得時にエラーが発生しました: {e}")
         return None
 
-@st.cache_data
 def fetch_daily_attendance(year_month):
     try:
         res = requests.get(f"{API_URL}/attendance/month/{year_month}")
@@ -139,7 +137,6 @@ def fetch_daily_attendance(year_month):
         st.error(f"日毎の勤怠データの取得時にエラーが発生しました: {e}")
         return None
 
-@st.cache_data
 def fetch_holidays(year_month):
     try:
         res = requests.get(f"{API_URL}/holidays/{year_month}")
@@ -152,7 +149,6 @@ def fetch_holidays(year_month):
         st.error(f"祝日データの取得時にエラーが発生しました: {e}")
         return []
     
-@st.cache_data
 def fetch_aggregate_attendance(year_month: str) -> Dict[str, float]:
     """
     勤怠データのリストから集計情報を計算する。

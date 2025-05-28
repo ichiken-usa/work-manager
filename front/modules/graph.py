@@ -110,11 +110,47 @@ def create_work_hours_graph(df: pd.DataFrame, threshold1: float = 140, threshold
 
     # レイアウト調整
     fig.update_layout(
-        #title="勤務時間推移と予測",
+        title="勤務実績推移と予測",
         xaxis_title="日付",
         yaxis_title="勤務時間（時間）",
         legend_title="種類",
         legend=dict(yanchor="top", y=1, xanchor="left", x=0),
     )
 
+    return fig
+
+def create_daily_attendance_chart(daily_attendance_data):
+    """
+    日毎の勤怠データを積み上げ棒グラフとして表示する関数。
+
+    Parameters:
+        daily_attendance_data (list): 日毎の勤怠データのリスト。
+    """
+
+    # データを整形
+    data = []
+    for record in daily_attendance_data:
+        summary = record["summary"]
+        data.append({
+            "date": record["raw"]["date"],
+            "実働時間": summary["actual_work_hours"],
+            "休憩時間": summary["break_hours"],
+            "中断時間": summary["interrupt_hours"],
+            "副業時間": summary["side_job_hours"]
+        })
+
+    # DataFrameに変換
+    df = pd.DataFrame(data)
+    df["date"] = pd.to_datetime(df["date"])  # 日付をdatetime型に変換
+
+    # グラフを作成
+    fig = px.bar(
+        df,
+        x="date",
+        y=["実働時間", "休憩時間", "中断時間", "副業時間"],
+        title="時間内訳積み上げ棒グラフ",
+        labels={"value": "時間", "variable": "項目", "date": "日付"},
+        barmode="stack"  # 積み上げ棒グラフ
+    )
+    fig.update_layout(xaxis_title="日付", yaxis_title="時間 (h)")
     return fig

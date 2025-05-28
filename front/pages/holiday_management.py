@@ -38,8 +38,7 @@ st.markdown("---")
 # -------------------------------
 st.subheader("📋 対象月の祝日一覧")
 
-selected_month = st.date_input("対象月を選択（Streamlitの仕様上日付を選択）", value=date.today())
-month_str = selected_month.strftime("%Y-%m")
+month_str = selected_date.strftime("%Y-%m")
 
 def fetch_holidays_by_month(year_month: str) -> List[Dict]:
     try:
@@ -69,17 +68,20 @@ st.subheader("✏️ 祝日を編集")
 if holidays:
     holiday_to_edit = st.selectbox("編集する祝日を選択", options=holidays, format_func=lambda h: f"{h['date']} - {h['name']}")
     new_name = st.text_input("新しい祝日の名前を入力", value=holiday_to_edit["name"])
-
     if st.button("祝日を更新"):
         if not new_name.strip():
             st.error("祝日の名前を入力してください。")
         else:
-            payload = {"name": new_name}
+            # date フィールドを含めた payload を作成
+            payload = {
+                "date": holiday_to_edit["date"],  # 必須フィールドとして date を追加
+                "name": new_name
+            }
             try:
                 res = requests.put(f"{API_URL}/holidays/{holiday_to_edit['date']}", json=payload)
                 if res.status_code == 200:
-                    st.success(f"祝日 '{holiday_to_edit['date']}' を '{new_name}' に更新しました。")
-                    st.experimental_rerun()
+                    #st.success(f"祝日 '{holiday_to_edit['date']}' を '{new_name}' に更新しました。")
+                    st.rerun()  
                 else:
                     st.error(f"更新に失敗しました: {res.text}")
             except Exception as e:
