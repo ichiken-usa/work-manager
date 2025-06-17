@@ -110,7 +110,7 @@ def create_work_hours_graph(df: pd.DataFrame, threshold1: float = 140, threshold
 
     # レイアウト調整
     fig.update_layout(
-        title="勤務実績推移と予測",
+        title="累積時間推移グラフ",
         xaxis_title="日付",
         yaxis_title="勤務時間（時間）",
         legend_title="種類",
