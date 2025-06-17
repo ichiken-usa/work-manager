@@ -17,8 +17,6 @@
     - [勤怠データCRUD](#勤怠データcrud)
     - [休日管理API](#休日管理api)
     - [集計機能](#集計機能)
-  - [APIスキーマ仕様](#apiスキーマ仕様)
-    - [HolidayBase（休日情報 共通部）](#holidaybase休日情報-共通部)
 
 
 ## 機能概略
@@ -172,16 +170,7 @@ http://<host>:8000/api
 
 | メソッド | パス                                         | 概要                       | 主なレスポンス         |
 |----------|----------------------------------------------|----------------------------|------------------------|
-| GET      | /attendance/summary/daily/{record_date}      | 指定日の集計データ取得      | AttendanceDaySummaryResponse |
-| GET      | /attendance/summary/monthly/{year_month}     | 指定月の集計データ取得      | List[AttendanceDaySummaryResponse] |
+| GET      | /attendance/summary/daily/{record_date}      | 指定日のデータ取得      | AttendanceDaySummaryResponse |
+| GET      | /attendance/summary/monthly/{year_month}     | 指定月のデータ取得      | List[AttendanceDaySummaryResponse] |
 | GET      | /attendance/summary/monthly-agg/{year_month} | 指定月の集計結果取得        | MonthlyAggregateSummary |
-
-## APIスキーマ仕様
-
-### HolidayBase（休日情報 共通部）
-
-| フィールド名 | 型   | 説明                         | 必須 |
-|--------------|------|------------------------------|------|
-| date         | date | 休日の日付                   | ○    |
-| name         | str  | 休日の名前                   | ○    |
 
