@@ -11,22 +11,18 @@
   - [フォルダ構造](#フォルダ構造)
   - [ORMモデル仕様](#ormモデル仕様)
     - [AttendanceRecord（勤怠レコード）](#attendancerecord勤怠レコード)
+    - [Holiday（休日管理）](#holiday休日管理)
   - [API エンドポイント仕様](#api-エンドポイント仕様)
     - [ベースURL](#ベースurl)
     - [勤怠データCRUD](#勤怠データcrud)
+    - [休日管理API](#休日管理api)
     - [集計機能](#集計機能)
-  - [APIスキーマ仕様](#apiスキーマ仕様)
-    - [Interruption（中断時間）](#interruption中断時間)
-    - [AttendanceBase（勤怠情報 共通部）](#attendancebase勤怠情報-共通部)
-    - [AttendanceCreate（勤怠新規作成リクエスト用）](#attendancecreate勤怠新規作成リクエスト用)
-    - [AttendanceUpdate（勤怠更新リクエスト用）](#attendanceupdate勤怠更新リクエスト用)
-    - [AttendanceOut（勤怠情報レスポンス用）](#attendanceout勤怠情報レスポンス用)
-    - [AttendanceSummary（集計値）](#attendancesummary集計値)
-    - [AttendanceDaySummaryResponse（1日分の集計レスポンス）](#attendancedaysummaryresponse1日分の集計レスポンス)
+
 
 ## 機能概略
 
 - __勤怠入力機能（input画面）__
+![input画面](img/2025-06-17-09-42-36.png)
   - 開始時刻、終了時刻、休憩時間の入力
   - 開始時刻、終了時刻、休憩時間を入力せず、副業のみを入力するケースにも対応（休日など）
   - 中断の開始と終了の入力。複数回入力できる。
@@ -35,8 +31,8 @@
   - 登録時に、仲介会社への入力に必要な、開始、終了、休憩合計の計算結果を表示。
   - 入力したかどうかカレンダー表示する機能。
   - 内容などのコメント入力。
-  - 入力済み表示カレンダーの日付をクリックしたら対象日付選択にしたいが、どうやらパーツへの代入がStreamlit自身にはじかれるので一旦断念。何かいい方法があるのかもしれない。
 - __勤怠集計、編集機能（edit画面）__
+![edit画面](img/2025-06-17-09-44-18.png)
   - 入力済みデータの編集。
   - 入力済みデータの削除。
   - 1ヶ月の集計
@@ -48,7 +44,13 @@
     - 中断合計：中断時間の合計
     - 副業合計：副業時間の合計
   - 入力したかどうかリンク付きでカレンダー表示する機能。クリックでその日の編集に飛べる。
-- __ToDo: ダッシュボード（dashboard画面）__
+- __休日管理機能（holiday_management画面）__
+![休日管理画面](img/2025-06-17-09-45-57.png)
+  - 祝日や休日を登録・編集・削除。
+    - 休みを登録すると未入力日から除外され、ダッシュボードでの予測に反映される。
+  - 月ごとの休日一覧を表示。
+- __ダッシュボード（dashboard画面）__
+![ダッシュボード](img/2025-06-17-09-46-57.png)
   - 月別の勤務時間内訳積み重ねの推移を表示
   - 日毎の勤務時間の累積を表示
   - 1ヶ月の集計表示
@@ -67,7 +69,7 @@ Dockerがインストールされていれば使えます。Pythonや必要な�
 - Docker composeを使用し起動。
 
 ```bash
-    docker compose up --build
+docker compose up --build
 ```
 
 - [http://localhost:8501](http://localhost:8501)で入力ページにアクセス。ポートが被ってる場合は変更してください。
@@ -75,60 +77,47 @@ Dockerがインストールされていれば使えます。Pythonや必要な�
 
 ## フォルダ構造
 
-フロントエンド（Streamlit）とバックエンド（FastAPI）でフォルダとDockerを分けています。  
-Docker composeで立ち上げれば、両方勝手に立ち上がります。手動で立ち上げる場合はfrontとbackそれぞれDockerで立ち上げてください。
-ui_components.pyが特にとっちらかっているので、いつか整理します・・・
-
 ```txt
 work-manager/
 ├── back/                        # バックエンド（FastAPI）
-│   ├── attendance.db            # SQLiteデータベース（永続化用）
 │   ├── database.py              # DB接続・セッション管理・Baseクラス定義
 │   ├── main.py                  # FastAPIアプリのエントリーポイント
-│   ├── models.py                # 勤怠データなどのORMモデル（テーブル定義）
-│   ├── schemas.py               # API入出力用のPydanticスキーマ
+│   ├── models/                  # ORMモデル
+│   │   ├── attendance.py        # 勤怠データモデル
+│   │   └── holiday.py           # 休日管理モデル
+│   ├── routers/                 # APIルータ
+│   │   ├── attendance.py        # 勤怠データCRUD API
+│   │   ├── attendance_summary.py # 勤怠集計API
+│   │   └── holiday.py           # 休日管理API
+│   ├── schemas/                 # Pydanticスキーマ
+│   │   ├── attendance.py        # 勤怠データスキーマ
+│   │   └── holiday.py           # 休日管理スキーマ
+│   ├── utils/                   # 共通ユーティリティ
+│   │   └── time_utils.py        # 時間関連ユーティリティ
 │   ├── requirements.txt         # バックエンド依存パッケージ
-│   ├── Dockerfile               # バックエンド用Dockerfile
-│   ├── modules/                 # バックエンド共通ロジック
-│   │   └── time_utils.py
-│   └── routers/                 # APIルータ（機能別分割）
-│       ├── attendance.py            # 勤怠データCRUD API
-│       └── attendance_summary.py    # 勤怠集計API
+│   └── Dockerfile               # バックエンド用Dockerfile
 ├── front/                       # フロントエンド（Streamlit）
-│   ├── input.py                 # 勤怠入力ページ（メイン画面）
+│   ├── pages/                   # Streamlitマルチページ
+│   │   ├── dashboard.py         # ダッシュボード画面
+│   │   ├── edit_attendance.py   # 勤怠編集画面
+│   │   └── holiday_management.py # 休日管理画面
+│   ├── modules/                 # 共通ロジック・UI部品
+│   │   ├── api_client.py        # API通信処理
+│   │   ├── graph.py             # グラフ描画ロジック
+│   │   ├── session.py           # セッション管理
+│   │   └── ui_components.py     # Streamlit用UI部品
 │   ├── settings.py              # API URLやデフォルト値などの設定
 │   ├── requirements.txt         # フロント依存パッケージ
-│   ├── Dockerfile               # フロント用Dockerfile
-│   ├── modules/                 # 共通ロジック・UI部品
-│   │   ├── api_client.py            # API通信処理
-│   │   ├── attendance_utils.py      # 勤怠集計・ロジック
-│   │   ├── session.py               # セッション管理
-│   │   ├── time_utils.py            # 日付・時刻変換ユーティリティ
-│   │   └── ui_components.py         # Streamlit用UI部品
-│   └── pages/                   # Streamlitマルチページ
-│       ├── dashboard.py             # ダッシュボード画面
-│       └── edit.py                  # 編集・集計画面
-├── docker-compose.yml            # Docker一括起動構成
-├── README.md                     # プロジェクト概要・利用方法
-├── LICENSE                       # ライセンス
-└── .gitignore                    # Git管理除外ファイル
+│   └── Dockerfile               # フロント用Dockerfile
+├── docker-compose.yml           # Docker一括起動構成
+├── README.md                    # プロジェクト概要・利用方法
+├── LICENSE                      # ライセンス
+└── .gitignore                   # Git管理除外ファイル
 ```
 
 ## ORMモデル仕様
 
-DB管理しているのは今の所この1テーブルのみです。モデルはSQLAlchemyのORMを用いて実装されています。  
-
 ### AttendanceRecord（勤怠レコード）
-
-勤怠管理システムのメインテーブル。1日1レコードで、各日付の勤怠情報を格納します。  
-
-- 勤怠入力・編集・集計・APIレスポンスの基礎となるテーブルです。
-- `date`はユニーク制約があり、1日1レコードのみ登録可能です。
-- `interruptions`はJSON形式で複数の中断時間帯を格納できます。
-- `updated_at`はレコード作成・更新時に自動で現在日時が入ります（ローカルタイム）。
-- `start_time`や`end_time`は文字列（"HH:MM"形式）で保存されます。
-- `break_minutes`や`side_job_minutes`は分単位の整数値です。
-- `comment`は任意の文字列を格納できます。
 
 | カラム名          | 型         | 説明                                         | 制約                   |
 |-------------------|------------|----------------------------------------------|------------------------|
@@ -142,9 +131,15 @@ DB管理しているのは今の所この1テーブルのみです。モデル�
 | updated_at        | DateTime   | 最終更新日時（レコード作成・更新時に自動設定）| default/auto-update    |
 | comment           | String     | コメント・備考欄                              | nullable               |
 
-## API エンドポイント仕様
+### Holiday（休日管理）
 
-API仕様はFastAPIで自動生成されます。[APIドキュメント localhost:8000/docs](localhost:8000/docs)
+| カラム名          | 型         | 説明                                         | 制約                   |
+|-------------------|------------|----------------------------------------------|------------------------|
+| id                | Integer    | 主キー（自動採番）                           | primary_key, index     |
+| date              | Date       | 休日の日付                                   | index, not null, unique|
+| name              | String     | 休日の名前（例: "元日", "建国記念の日"）      | nullable               |
+
+## API エンドポイント仕様
 
 ### ベースURL
 
@@ -161,62 +156,21 @@ http://<host>:8000/api
 | DELETE   | /attendance/{record_date}                    | 指定日の勤怠データ削除      | {"detail": "Deleted"}  |
 | GET      | /attendance/month/{year_month}               | 指定月の勤怠データ一覧取得  | List[AttendanceOut]    |
 
+### 休日管理API
+
+| メソッド | パス                                         | 概要                       | 主なレスポンス         |
+|----------|----------------------------------------------|----------------------------|------------------------|
+| GET      | /holidays/                                   | 全ての休日を取得            | List[HolidayOut]       |
+| GET      | /holidays/{year_month}                       | 指定月の休日を取得          | List[HolidayOut]       |
+| POST     | /holidays/                                   | 新しい休日を登録            | HolidayOut             |
+| PUT      | /holidays/{holiday_date}                     | 指定日の休日を更新          | HolidayOut             |
+| DELETE   | /holidays/{holiday_date}                     | 指定日の休日を削除          | {"detail": "Deleted"}  |
+
 ### 集計機能
 
-集計機能は工事中です。
+| メソッド | パス                                         | 概要                       | 主なレスポンス         |
+|----------|----------------------------------------------|----------------------------|------------------------|
+| GET      | /attendance/summary/daily/{record_date}      | 指定日のデータ取得      | AttendanceDaySummaryResponse |
+| GET      | /attendance/summary/monthly/{year_month}     | 指定月のデータ取得      | List[AttendanceDaySummaryResponse] |
+| GET      | /attendance/summary/monthly-agg/{year_month} | 指定月の集計結果取得        | MonthlyAggregateSummary |
 
-## APIスキーマ仕様
-
-### Interruption（中断時間）
-
-| フィールド名 | 型   | 説明                         | 必須 |
-|--------------|------|------------------------------|------|
-| start        | str  | 中断開始時刻（"HH:MM"形式）  | ○    |
-| end          | str  | 中断終了時刻（"HH:MM"形式）  | ○    |
-
-### AttendanceBase（勤怠情報 共通部）
-
-| フィールド名      | 型                        | 説明                                         | 必須 | 備考                |
-|-------------------|---------------------------|----------------------------------------------|------|---------------------|
-| start_time        | Optional[str]             | 勤務開始時刻（"HH:MM"形式）                  | ×    |                     |
-| end_time          | Optional[str]             | 勤務終了時刻（"HH:MM"形式）                  | ×    |                     |
-| break_minutes     | Optional[int]             | 休憩時間（分単位）                           | ×    |                     |
-| interruptions     | Optional[List[Interruption]] | 中断時間リスト                               | ×    | デフォルトは空リスト |
-| side_job_minutes  | Optional[int]             | 副業時間（分単位）                           | ×    |                     |
-| updated_at        | Optional[datetime]        | 最終更新日時                                 | ×    |                     |
-| comment           | Optional[str]             | コメント・備考欄                              | ×    |                     |
-
-### AttendanceCreate（勤怠新規作成リクエスト用）
-
-- AttendanceBaseを継承。追加フィールドなし。
-
-### AttendanceUpdate（勤怠更新リクエスト用）
-
-- AttendanceBaseを継承。追加フィールドなし。
-
-### AttendanceOut（勤怠情報レスポンス用）
-
-| フィールド名      | 型                        | 説明                                         | 必須 |
-|-------------------|---------------------------|----------------------------------------------|------|
-| date              | date                      | 勤怠日付                                     | ○    |
-| ...               | AttendanceBaseの全フィールド | 上記参照                                     |      |
-
-### AttendanceSummary（集計値）
-
-| フィールド名         | 型     | 説明                   |
-|----------------------|--------|------------------------|
-| work_hours           | float  | 勤務時間（時間単位）   |
-| break_hours          | float  | 休憩時間（時間単位）   |
-| interruptions_count  | int    | 中断回数               |
-| interrupt_hours      | float  | 中断時間（時間単位）   |
-| side_job_hours       | float  | 副業時間（時間単位）   |
-| break_total_hours    | float  | 休憩＋中断合計（時間） |
-| actual_work_hours    | float  | 実働時間（時間単位）   |
-| gross_hours          | float  | 総拘束時間（時間単位） |
-
-### AttendanceDaySummaryResponse（1日分の集計レスポンス）
-
-| フィールド名 | 型                | 説明                   |
-|--------------|-------------------|------------------------|
-| raw          | AttendanceOut     | 元データ               |
-| summary      | AttendanceSummary | 計算・集計結果         |
